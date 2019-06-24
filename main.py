@@ -1,12 +1,13 @@
-import subprocess
+import email
+import imaplib
 import os
 import smtplib
-import email
-from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
-from email.mime.text import MIMEText
+import subprocess
 from email.header import decode_header
-import imaplib
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 import config
 
 mail = imaplib.IMAP4_SSL(config.imap_host)
@@ -33,7 +34,6 @@ def send_book(sender_email, book_path, book_name):
     try:
         acct.sendmail(config.email, config.kindle_email, msg.as_string())
     except smtplib.SMTPSenderRefused as e:
-        # msg = MIMEText(str(e[0]) + e[1].decode("utf-8"))
         msg = MIMEText(e.args[1].decode("utf-8"))
         msg["Subject"] = "Conversion ERROR"
         msg["To"] = sender_email
@@ -46,9 +46,11 @@ while True:
     mail.list()
     mail.select("inbox")
     retcode, messages = mail.search(None, "(UNSEEN)")
+
     if retcode == "OK":
         for num in messages[0].split():
             typ, data = mail.fetch(num, "(RFC822)")
+
             for response_part in data:
                 if isinstance(response_part, tuple):
                     m = email.message_from_bytes(response_part[1])
@@ -56,20 +58,22 @@ while True:
                     mail.store(num, "+FLAGS", "\\Seen")
 
                     for part in m.walk():
-                        # typee = part.get_content_maintype()
-                        # print(typee, typee == "multipart", typee == "text", part.get("Content-Disposition") is None)
 
                         if part.get_content_maintype() == "multipart":
                             continue
+
                         if part.get_content_maintype() == "text":
                             continue
+
                         if part.get("Content-Disposition") is None:
                             continue
 
                         file_name = decode_header(part.get_filename())[0][0]
+
                         if not isinstance(file_name, str):
                             file_name = file_name.decode("utf-8")
                         # file_name=part.get_filename()
+
                         if file_name is not None:
                             print("CONVERSION STARTED", file_name)
                             save_path = os.path.join(save_dir, file_name)
