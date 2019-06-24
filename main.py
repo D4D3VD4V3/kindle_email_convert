@@ -42,7 +42,7 @@ def cleanup_files(paths):
 
 def parse_emails(messages):
     for num in messages[0].split():
-        typ, data = mail.fetch(num, "(RFC822)")
+        _, data = mail.fetch(num, "(RFC822)")
 
         for response_part in data:
             if isinstance(response_part, tuple):
@@ -65,16 +65,13 @@ def parse_emails(messages):
                     return file_name, part, sender
 
 
-def check_email():
+@retry
+def main_loop():
+
     mail.list()
     mail.select("inbox")
 
-    return mail.search(None, "(UNSEEN)")
-
-
-@retry
-def main_loop():
-    retcode, messages = check_email()
+    retcode, messages = mail.search(None, "(UNSEEN)")
 
     if retcode == "OK":
         file_name, part, sender_email = parse_emails(messages)
@@ -105,12 +102,12 @@ def main_loop():
             print("Sent", conv_path)
 
         except smtplib.SMTPSenderRefused as e:
+            cleanup_files(cleanup_paths)
             print("Could not send book")
             msg = MIMEText(e.args[1].decode("utf-8"))
             msg["Subject"] = "Conversion ERROR"
             msg["To"] = sender_email
             acct.sendmail(config.email, sender_email, msg.as_string())
-            cleanup_files(cleanup_paths)
 
 
 if __name__ == "__main__":
