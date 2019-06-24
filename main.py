@@ -13,10 +13,7 @@ from retrying import retry
 import config
 
 
-def send_book(sender_email, book_path, book_name):
-    acct = smtplib.SMTP_SSL(config.smtp_host)
-    acct.login(config.email, config.password)
-
+def generate_email(sender_email, book_path, book_name):
     msg = MIMEMultipart()
     msg["Subject"] = "Converted " + book_name
     msg["From"] = config.email
@@ -28,23 +25,7 @@ def send_book(sender_email, book_path, book_name):
         )
     msg.attach(attachment)
 
-    try:
-        acct.sendmail(config.email, config.kindle_email, msg.as_string())
-        print("Sent", book_path)
-
-    except smtplib.SMTPSenderRefused as e:
-        print("Could not send book")
-        msg = MIMEText(e.args[1].decode("utf-8"))
-        msg["Subject"] = "Conversion ERROR"
-        msg["To"] = sender_email
-        acct.sendmail(config.email, sender_email, msg.as_string())
-
-
-def download_attachment(save_path, file_name, part):
-    fp = open(save_path, "wb")
-    fp.write(part.get_payload(decode=True))
-    fp.close()
-    print("saved file", file_name)
+    return msg
 
 
 def cleanup_files(paths):
@@ -56,14 +37,7 @@ def cleanup_files(paths):
 
 
 def convert_book(file_name, book_name):
-    cmd = (
-        "ebook-convert "
-        + '"'
-        + file_name
-        + '" '
-        + book_name
-        + ".mobi -v"
-    )
+    cmd = ['ebook-convert', file_name, book_name + '.mobi', '-v']
     print("Running", cmd)
     subprocess.call(cmd)
 
@@ -98,35 +72,53 @@ def parse_emails(messages):
                     # file_name=part.get_filename()
 
                     if file_name is not None:
-                        save_dir = os.getcwd()
-                        print("CONVERSION STARTED", file_name)
-                        save_path = os.path.join(save_dir, file_name)
-                        book_name = os.path.splitext(os.path.basename(save_path))[0]
-                        conv_path = os.path.join(save_dir, book_name + ".mobi")
-                        cleanup_paths = [save_path, conv_path]
-
-                        cleanup_files(cleanup_paths)
-
-                        download_attachment(save_path, file_name, part)
-                        convert_book(file_name, book_name)
-                        send_book(sender, conv_path, book_name)
-
-                        cleanup_files(cleanup_paths)
+                        return file_name, part, sender
 
 
 def check_email():
     mail.list()
     mail.select("inbox")
-    retcode, messages = mail.search(None, "(UNSEEN)")
 
-    if retcode == "OK":
-        parse_emails(messages)
+    return mail.search(None, "(UNSEEN)")
 
 
 @retry
 def main_loop():
-    while True:
-        check_email()
+    retcode, messages = check_email()
+
+    if retcode == "OK":
+        file_name, part, sender_email = parse_emails(messages)
+
+        save_dir = os.getcwd()
+        print("Conversion started", file_name)
+        save_path = os.path.join(save_dir, file_name)
+        book_name = os.path.splitext(os.path.basename(save_path))[0]
+        conv_path = os.path.join(save_dir, book_name + ".mobi")
+        cleanup_paths = [save_path, conv_path]
+
+        cleanup_files(cleanup_paths)
+
+        with open(save_path, "wb") as fp:
+            fp.write(part.get_payload(decode=True))
+            print("Saved file", file_name)
+
+        convert_book(file_name, book_name)
+        msg = generate_email(sender_email, conv_path, book_name)
+
+        acct = smtplib.SMTP_SSL(config.smtp_host)
+        acct.login(config.email, config.password)
+
+        try:
+            acct.sendmail(config.email, config.kindle_email, msg.as_string())
+            print("Sent", conv_path)
+
+        except smtplib.SMTPSenderRefused as e:
+            print("Could not send book")
+            msg = MIMEText(e.args[1].decode("utf-8"))
+            msg["Subject"] = "Conversion ERROR"
+            msg["To"] = sender_email
+            acct.sendmail(config.email, sender_email, msg.as_string())
+            cleanup_files(cleanup_paths)
 
 
 if __name__ == "__main__":
