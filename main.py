@@ -12,6 +12,8 @@ from retrying import retry
 
 import config
 
+CONVERT_EXT = ".mobi"
+
 
 def generate_email(sender_email, book_path, book_name):
     msg = MIMEMultipart()
@@ -23,7 +25,7 @@ def generate_email(sender_email, book_path, book_name):
         attachment = MIMEApplication(fp.read())
 
     attachment.add_header(
-        "Content-Disposition", "attachment", filename=book_name + ".mobi"
+        "Content-Disposition", "attachment", filename=book_name + CONVERT_EXT
     )
     msg.attach(attachment)
 
@@ -81,7 +83,7 @@ def main_loop():
         print("Conversion started", file_name)
         save_path = os.path.join(save_dir, file_name)
         book_name = os.path.splitext(os.path.basename(save_path))[0]
-        conv_path = os.path.join(save_dir, book_name + ".mobi")
+        conv_path = os.path.join(save_dir, book_name + CONVERT_EXT)
         cleanup_paths = [save_path, conv_path]
 
         cleanup_files(cleanup_paths)
@@ -90,7 +92,7 @@ def main_loop():
             fp.write(part.get_payload(decode=True))
             print("Saved file", file_name)
 
-        cmd = ['ebook-convert', file_name, book_name + '.mobi', '-v']
+        cmd = ["ebook-convert", file_name, book_name + CONVERT_EXT, "-v"]
         subprocess.call(cmd)
 
         acct = smtplib.SMTP_SSL(config.smtp_host)
