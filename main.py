@@ -12,12 +12,6 @@ from retrying import retry
 
 import config
 
-mail = imaplib.IMAP4_SSL(config.imap_host)
-mail.login(config.email, config.password)
-
-
-save_dir = os.getcwd()
-
 
 def send_book(sender_email, book_path, book_name):
     acct = smtplib.SMTP_SSL(config.smtp_host)
@@ -62,7 +56,6 @@ def cleanup_files(paths):
 
 
 def convert_book(file_name, book_name):
-
     cmd = (
         "ebook-convert "
         + '"'
@@ -105,6 +98,7 @@ def parse_emails(messages):
                     # file_name=part.get_filename()
 
                     if file_name is not None:
+                        save_dir = os.getcwd()
                         print("CONVERSION STARTED", file_name)
                         save_path = os.path.join(save_dir, file_name)
                         book_name = os.path.splitext(os.path.basename(save_path))[0]
@@ -136,4 +130,6 @@ def main_loop():
 
 
 if __name__ == "__main__":
+    mail = imaplib.IMAP4_SSL(config.imap_host)
+    mail.login(config.email, config.password)
     main_loop()
