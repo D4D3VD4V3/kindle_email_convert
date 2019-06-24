@@ -33,15 +33,17 @@ def send_book(sender_email, book_path, book_name):
             "Content-Disposition", "attachment", filename=book_name + ".mobi"
         )
     msg.attach(attachment)
+
     try:
         acct.sendmail(config.email, config.kindle_email, msg.as_string())
+        print("Sent", book_path)
+
     except smtplib.SMTPSenderRefused as e:
+        print("Could not send book")
         msg = MIMEText(e.args[1].decode("utf-8"))
         msg["Subject"] = "Conversion ERROR"
         msg["To"] = sender_email
         acct.sendmail(config.email, sender_email, msg.as_string())
-
-    print("Sent", book_path)
 
 
 @retry
