@@ -56,10 +56,7 @@ def parse_emails(messages):
 
                 for part in m.walk():
 
-                    if part.get_content_maintype() == "multipart":
-                        continue
-
-                    if part.get_content_maintype() == "text":
+                    if part.get_content_maintype() in ("multipart", "text"):
                         continue
 
                     if part.get("Content-Disposition") is None:
