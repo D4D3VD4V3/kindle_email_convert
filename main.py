@@ -4,6 +4,7 @@ import smtplib
 import email
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
+from email.mime.text import MIMEText
 from email.header import decode_header
 import imaplib
 import config
@@ -11,13 +12,14 @@ import config
 mail = imaplib.IMAP4_SSL(config.imap_host)
 mail.login(config.email, config.password)
 
-acct = smtplib.SMTP_SSL(config.smtp_host, 465)
-acct.login(config.email, config.password)
 
 save_dir = os.getcwd()
 
 
-def send_book(book_path, book_name):
+def send_book(sender_email, book_path, book_name):
+    acct = smtplib.SMTP_SSL(config.smtp_host)
+    acct.login(config.email, config.password)
+
     msg = MIMEMultipart()
     msg["Subject"] = "Converted " + book_name
     msg["From"] = config.email
@@ -28,7 +30,15 @@ def send_book(book_path, book_name):
             "Content-Disposition", "attachment", filename=book_name + ".mobi"
         )
     msg.attach(attachment)
-    acct.sendmail(config.email, config.kindle_email, msg.as_string())
+    try:
+        acct.sendmail(config.email, config.kindle_email, msg.as_string())
+    except smtplib.SMTPSenderRefused as e:
+        # msg = MIMEText(str(e[0]) + e[1].decode("utf-8"))
+        msg = MIMEText(e.args[1].decode("utf-8"))
+        msg["Subject"] = "Conversion ERROR"
+        msg["To"] = sender_email
+        acct.sendmail(config.email, sender_email, msg.as_string())
+
     print("Sent", book_path)
 
 
@@ -45,11 +55,10 @@ while True:
                     print(m["From"])
                     mail.store(num, "+FLAGS", "\\Seen")
 
-                    # import ipdb;ipdb.set_trace()
                     for part in m.walk():
                         # typee = part.get_content_maintype()
                         # print(typee, typee == "multipart", typee == "text", part.get("Content-Disposition") is None)
-                        
+
                         if part.get_content_maintype() == "multipart":
                             continue
                         if part.get_content_maintype() == "text":
@@ -57,7 +66,9 @@ while True:
                         if part.get("Content-Disposition") is None:
                             continue
 
-                        file_name = decode_header(part.get_filename())[0][0].decode("utf-8")
+                        file_name = decode_header(part.get_filename())[0][0]
+                        if not isinstance(file_name, str):
+                            file_name = file_name.decode("utf-8")
                         # file_name=part.get_filename()
                         if file_name is not None:
                             print("CONVERSION STARTED", file_name)
@@ -77,10 +88,17 @@ while True:
                             fp.write(part.get_payload(decode=True))
                             fp.close()
                             print("saved file", file_name)
-                            cmd = "ebook-convert " + '"' + file_name + '" ' + book_name + ".mobi -v"
+                            cmd = (
+                                "ebook-convert "
+                                + '"'
+                                + file_name
+                                + '" '
+                                + book_name
+                                + ".mobi -v"
+                            )
                             print("Running", cmd)
                             subprocess.call(cmd)
-                            send_book(conv_path, book_name)
+                            send_book(sender, conv_path, book_name)
                             try:
                                 os.remove(save_path)
                                 os.remove(conv_path)
