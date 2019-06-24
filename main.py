@@ -18,11 +18,13 @@ def generate_email(sender_email, book_path, book_name):
     msg["Subject"] = "Converted " + book_name
     msg["From"] = config.email
     msg["To"] = config.kindle_email
+
     with (open(book_path, "rb")) as fp:
         attachment = MIMEApplication(fp.read())
-        attachment.add_header(
-            "Content-Disposition", "attachment", filename=book_name + ".mobi"
-        )
+
+    attachment.add_header(
+        "Content-Disposition", "attachment", filename=book_name + ".mobi"
+    )
     msg.attach(attachment)
 
     return msg
@@ -50,20 +52,15 @@ def parse_emails(messages):
 
                 for part in m.walk():
 
-                    if part.get_content_maintype() in ("multipart", "text"):
-                        continue
-
-                    if part.get("Content-Disposition") is None:
+                    if part.get_content_maintype() in ("multipart", "text") or part.get("Content-Disposition") is None:
                         continue
 
                     file_name = decode_header(part.get_filename())[0][0]
 
                     if not isinstance(file_name, str):
                         file_name = file_name.decode("utf-8")
-                    # file_name=part.get_filename()
 
-                    if file_name is not None:
-                        return file_name, part, sender
+                    return file_name, part, sender
 
 
 def check_email():
