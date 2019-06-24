@@ -36,12 +36,6 @@ def cleanup_files(paths):
         print(e)
 
 
-def convert_book(file_name, book_name):
-    cmd = ['ebook-convert', file_name, book_name + '.mobi', '-v']
-    print("Running", cmd)
-    subprocess.call(cmd)
-
-
 def parse_emails(messages):
     for num in messages[0].split():
         typ, data = mail.fetch(num, "(RFC822)")
@@ -99,11 +93,13 @@ def main_loop():
             fp.write(part.get_payload(decode=True))
             print("Saved file", file_name)
 
-        convert_book(file_name, book_name)
-        msg = generate_email(sender_email, conv_path, book_name)
+        cmd = ['ebook-convert', file_name, book_name + '.mobi', '-v']
+        subprocess.call(cmd)
 
         acct = smtplib.SMTP_SSL(config.smtp_host)
         acct.login(config.email, config.password)
+
+        msg = generate_email(sender_email, conv_path, book_name)
 
         try:
             acct.sendmail(config.email, config.kindle_email, msg.as_string())
