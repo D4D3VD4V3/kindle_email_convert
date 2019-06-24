@@ -46,74 +46,93 @@ def send_book(sender_email, book_path, book_name):
         acct.sendmail(config.email, sender_email, msg.as_string())
 
 
+def download_attachment(save_path, file_name, part):
+    fp = open(save_path, "wb")
+    fp.write(part.get_payload(decode=True))
+    fp.close()
+    print("saved file", file_name)
+
+
+def cleanup_files(paths):
+    try:
+        for path in paths:
+            os.remove(path)
+    except Exception as e:
+        print(e)
+
+
+def convert_book(file_name, book_name):
+
+    cmd = (
+        "ebook-convert "
+        + '"'
+        + file_name
+        + '" '
+        + book_name
+        + ".mobi -v"
+    )
+    print("Running", cmd)
+    subprocess.call(cmd)
+
+
+def parse_emails(messages):
+    for num in messages[0].split():
+        typ, data = mail.fetch(num, "(RFC822)")
+
+        for response_part in data:
+            if isinstance(response_part, tuple):
+                m = email.message_from_bytes(response_part[1])
+                sender = m["From"]
+                print(sender)
+
+                mail.store(num, "+FLAGS", "\\Seen")
+
+                for part in m.walk():
+
+                    if part.get_content_maintype() == "multipart":
+                        continue
+
+                    if part.get_content_maintype() == "text":
+                        continue
+
+                    if part.get("Content-Disposition") is None:
+                        continue
+
+                    file_name = decode_header(part.get_filename())[0][0]
+
+                    if not isinstance(file_name, str):
+                        file_name = file_name.decode("utf-8")
+                    # file_name=part.get_filename()
+
+                    if file_name is not None:
+                        print("CONVERSION STARTED", file_name)
+                        save_path = os.path.join(save_dir, file_name)
+                        book_name = os.path.splitext(os.path.basename(save_path))[0]
+                        conv_path = os.path.join(save_dir, book_name + ".mobi")
+                        cleanup_paths = [save_path, conv_path]
+
+                        cleanup_files(cleanup_paths)
+
+                        download_attachment(save_path, file_name, part)
+                        convert_book(file_name, book_name)
+                        send_book(sender, conv_path, book_name)
+
+                        cleanup_files(cleanup_paths)
+
+
+def check_email():
+    mail.list()
+    mail.select("inbox")
+    retcode, messages = mail.search(None, "(UNSEEN)")
+
+    if retcode == "OK":
+        parse_emails(messages)
+
+
 @retry
 def main_loop():
     while True:
-        mail.list()
-        mail.select("inbox")
-        retcode, messages = mail.search(None, "(UNSEEN)")
-
-        if retcode == "OK":
-            for num in messages[0].split():
-                typ, data = mail.fetch(num, "(RFC822)")
-
-                for response_part in data:
-                    if isinstance(response_part, tuple):
-                        m = email.message_from_bytes(response_part[1])
-                        print(m["From"])
-                        mail.store(num, "+FLAGS", "\\Seen")
-
-                        for part in m.walk():
-
-                            if part.get_content_maintype() == "multipart":
-                                continue
-
-                            if part.get_content_maintype() == "text":
-                                continue
-
-                            if part.get("Content-Disposition") is None:
-                                continue
-
-                            file_name = decode_header(part.get_filename())[0][0]
-
-                            if not isinstance(file_name, str):
-                                file_name = file_name.decode("utf-8")
-                            # file_name=part.get_filename()
-
-                            if file_name is not None:
-                                print("CONVERSION STARTED", file_name)
-                                save_path = os.path.join(save_dir, file_name)
-                                book_name = os.path.splitext(os.path.basename(save_path))[0]
-                                conv_path = os.path.join(save_dir, book_name + ".mobi")
-                                sender = m["From"]
-
-                                print("Book is ", book_name)
-                                print("file is ", file_name)
-                                try:
-                                    os.remove(save_path)
-                                    os.remove(conv_path)
-                                except Exception as e:
-                                    print(e)
-                                fp = open(save_path, "wb")
-                                fp.write(part.get_payload(decode=True))
-                                fp.close()
-                                print("saved file", file_name)
-                                cmd = (
-                                    "ebook-convert "
-                                    + '"'
-                                    + file_name
-                                    + '" '
-                                    + book_name
-                                    + ".mobi -v"
-                                )
-                                print("Running", cmd)
-                                subprocess.call(cmd)
-                                send_book(sender, conv_path, book_name)
-                                try:
-                                    os.remove(save_path)
-                                    os.remove(conv_path)
-                                except Exception as e:
-                                    print(e)
+        check_email()
 
 
 if __name__ == "__main__":
